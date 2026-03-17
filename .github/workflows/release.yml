@@ -29,7 +29,6 @@ jobs:
           args: >-
             --release
             --out dist
-            --manifest-path rust_engine/Cargo.toml
           manylinux: auto            # Linux 自动用 manylinux 容器，兼容主流发行版
 
       - name: Upload wheel
