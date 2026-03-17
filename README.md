@@ -20,7 +20,7 @@ Works with:
 * filtering
 * URL configs
 
-Everything continues to work exactly the same.
+**Everything continues to work exactly the same.**
 
 ---
 
@@ -42,9 +42,7 @@ Tested on a production PostgreSQL database with a **3-level nested serializer**.
 
 **Key takeaway**
 
-* Up to **37× faster**
-* **Zero N+1 queries**
-* **Single SQL query**
+* Up to **37x faster**
 
 ---
 
@@ -173,6 +171,7 @@ Key improvements:
 * BooleanField
 * DateTimeField
 * ...
+
 ### Supported relationships
 
 * ForeignKey
@@ -218,12 +217,6 @@ Your API will still work.
 
 ## Installation
 
-### Install from PyPI
-
-```bash
-pip install drf-rust
-```
-
 ### Install from source
 
 ```bash
@@ -253,25 +246,6 @@ maturin develop --release
 | PostgreSQL | ✓      |
 | MySQL      | ✓      |
 | SQLite     | ✓      |
-
----
-
-## Project Structure
-
-```
-drf_rust/
-├── serializers.py
-├── field_classifier.py
-├── sql_generator.py
-├── schema_builder.py
-├── python_filler.py
-
-rust_engine/
-├── lib.rs
-├── executor.rs
-├── schema.rs
-├── types.rs
-```
 
 ---
 

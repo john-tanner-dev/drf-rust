@@ -1,0 +1,15 @@
+# 编译产物（绝对不提交）
+dist/
+*.whl
+*.egg-info/
+target/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# 系统文件
+.DS_Store
+Thumbs.db

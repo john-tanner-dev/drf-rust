@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "drf-rust"
+version = "0.1.0"
+description = "RustModelSerializer: DRF ModelSerializer read path accelerated by Rust (PyO3)"
+requires-python = ">=3.8"
+dependencies = [
+"Django>=3.0",
+"djangorestframework>=3.12.0",
+]
+
+[tool.maturin]
+manifest-path = "rust_engine/Cargo.toml"
+python-source = "."
+module-name = "drf_rust.rust_engine"
+exclude = ["**/__pycache__/**"]
+
