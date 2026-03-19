@@ -1,7 +1,33 @@
+// ============================================================================
+// schema.rs — Schema JSON deserialization structs.
+// schema.rs — Schema JSON 反序列化结构体。
+//
+// These structs mirror the schema JSON that Python's schema_builder.py produces.
+// Rust deserializes the JSON into these structs via serde, then uses them
+// to guide SQL execution and result building.
+// 这些结构体镜像 Python 的 schema_builder.py 生成的 schema JSON。
+// Rust 通过 serde 将 JSON 反序列化为这些结构体，然后用它们指导 SQL 执行和结果构建。
+//
+// The schema is hierarchical:
+// Schema 是层级结构的：
+//   Schema
+//     ├── sql_fields: [SqlField, ...]        — columns in main SQL SELECT
+//     │                                         主 SQL SELECT 中的列
+//     ├── prefetch_fields: [PrefetchField, ...]  — separate prefetch queries
+//     │   └── child_schema: Schema (recursive)     递归的子 Schema
+//     │                                           单独的预取查询
+//     └── python_only_fields: [String, ...]   — computed by Python
+//                                               由 Python 计算
+// ============================================================================
+
 use serde::Deserialize;
 use std::collections::HashMap;
 
-
+/// Root schema describing the serializer structure.
+/// 描述序列化器结构的根 Schema。
+///
+/// This is deserialized from the schema_json parameter (Parameter 1).
+/// 从 schema_json 参数（参数 1）反序列化。
 #[derive(Debug, Clone, Deserialize)]
 pub struct Schema {
     /// Primary database alias (e.g., "default") — determines which connection pool to use.
@@ -34,7 +60,12 @@ pub struct Schema {
     pub internal_pks: HashMap<String, String>,
 }
 
-
+/// A field resolved to a database column, included in the main SQL SELECT.
+/// 解析为数据库列的字段，包含在主 SQL SELECT 中。
+///
+/// Rust uses field_type to determine how to convert the raw database value
+/// to the appropriate TypedValue (Int, Float, Str, Bool, etc.).
+/// Rust 使用 field_type 来确定如何将原始数据库值转换为适当的 TypedValue。
 #[derive(Debug, Clone, Deserialize)]
 pub struct SqlField {
     /// Serializer field name (used as dict key in Python output).
@@ -74,12 +105,23 @@ pub struct SqlField {
     pub coerce_to_string: Option<bool>,
 }
 
-
+/// Default value for coerce_to_string (None means use global DRF setting).
+/// coerce_to_string 的默认值（None 表示使用全局 DRF 设置）。
 fn default_coerce_to_string() -> Option<bool> {
     None
 }
 
-
+/// A prefetch field requiring a separate SQL query.
+/// 需要单独 SQL 查询的预取字段。
+///
+/// The prefetch_sql_template contains an {ids} placeholder that Rust replaces
+/// with actual parent pk values after executing the main SQL.
+/// prefetch_sql_template 包含 {ids} 占位符，Rust 在执行主 SQL 后
+/// 用实际的父级 pk 值替换它。
+///
+/// Example / 示例:
+///   "SELECT ... FROM tag INNER JOIN article_tags ON ... WHERE article_tags.article_id IN ({ids})"
+///   → After filling: "... IN (1,2,3)"
 #[derive(Debug, Clone, Deserialize)]
 pub struct PrefetchField {
     /// Serializer field name (e.g., "tags", "comments").

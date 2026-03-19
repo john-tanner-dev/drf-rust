@@ -1,3 +1,26 @@
+// ============================================================================
+// executor.rs — SQL execution and result building.
+// executor.rs — SQL 执行和结果构建。
+//
+// This is the core module that:
+// 这是核心模块，负责：
+//   1. Executes the main SQL query (fetches all rows).
+//      执行主 SQL 查询（获取所有行）。
+//   2. Extracts pk values from main results.
+//      从主结果中提取 pk 值。
+//   3. Executes all prefetch SQL queries concurrently (via tokio::spawn).
+//      并发执行所有预取 SQL 查询（通过 tokio::spawn）。
+//   4. Groups prefetch results by parent pk (join_key).
+//      按父级 pk（join_key）分组预取结果。
+//   5. Merges prefetch results into main results.
+//      将预取结果合并到主结果中。
+//   6. Removes internal columns (pk, __prefetch_join_key) before returning.
+//      返回前移除内部列（pk、__prefetch_join_key）。
+//
+// All database operations use sqlx's Any driver for dialect-agnostic SQL execution.
+// 所有数据库操作使用 sqlx 的 Any 驱动进行方言无关的 SQL 执行。
+// ============================================================================
+
 use sqlx::any::AnyRow;
 use sqlx::{Column, Row, ValueRef};
 use std::collections::HashMap;
@@ -8,7 +31,23 @@ use crate::pool;
 use crate::schema::{Schema, SqlField, PrefetchField};
 use crate::types::{DbConfig, DjangoSettings, TypedValue};
 
-
+/// Execute main SQL and all prefetch SQLs, returning assembled results.
+/// 执行主 SQL 和所有预取 SQL，返回组装后的结果。
+///
+/// This is the top-level execution function called from lib.rs.
+/// 这是从 lib.rs 调用的顶层执行函数。
+///
+/// Flow / 流程:
+///   1. Get connection pool for primary_db.
+///      获取 primary_db 的连接池。
+///   2. Execute main SQL → Vec<AnyRow>.
+///      执行主 SQL → Vec<AnyRow>。
+///   3. Convert rows to Vec<HashMap<String, TypedValue>> using field schema.
+///      使用字段 schema 将行转换为 Vec<HashMap<String, TypedValue>>。
+///   4. If prefetch_fields exist: extract pks → execute prefetch → merge.
+///      如果存在 prefetch_fields：提取 pk → 执行预取 → 合并。
+///   5. Remove internal columns (pk, __*_pk).
+///      移除内部列（pk、__*_pk）。
 pub async fn execute_all(
     schema: &Schema,
     sql_map: &HashMap<String, String>,
@@ -106,7 +145,14 @@ pub async fn execute_all(
     Ok(results)
 }
 
-
+/// Execute all prefetch fields concurrently.
+/// 并发执行所有预取字段。
+///
+/// Each prefetch field gets its own tokio task for concurrent I/O.
+/// 每个预取字段获得自己的 tokio 任务以并发 I/O。
+///
+/// Returns: HashMap<field_name, HashMap<parent_pk, Vec<child_records>>>
+/// 返回：HashMap<字段名, HashMap<父级pk, Vec<子记录>>>
 async fn execute_prefetch_fields(
     prefetch_fields: &[PrefetchField],
     parent_pks: &[String],
@@ -141,7 +187,16 @@ async fn execute_prefetch_fields(
     Ok(all_results)
 }
 
-
+/// Execute a single prefetch query and group results by join key.
+/// 执行单个预取查询并按 join_key 分组结果。
+///
+/// Steps / 步骤:
+///   1. Fill {ids} placeholder with actual parent pk values.
+///      用实际的父级 pk 值填充 {ids} 占位符。
+///   2. Execute SQL against the child schema's database.
+///      在子 schema 的数据库上执行 SQL。
+///   3. Group result rows by join_key value (maps child → parent).
+///      按 join_key 值分组结果行（将子项映射到父项）。
 async fn execute_one_prefetch(
     field: &PrefetchField,
     parent_pks: &[String],
@@ -198,7 +253,20 @@ async fn execute_one_prefetch(
     Ok((field.name.clone(), grouped))
 }
 
-
+/// Convert an AnyRow to a HashMap<String, TypedValue> based on field schema.
+/// 根据字段 schema 将 AnyRow 转换为 HashMap<String, TypedValue>。
+///
+/// For each column in the row:
+/// 对于行中的每一列：
+///   - If it matches a schema-defined field → convert using field_type-specific logic.
+///     如果匹配 schema 定义的字段 → 使用 field_type 特定逻辑转换。
+///   - Otherwise (internal column like pk, join_key) → extract as generic value.
+///     否则（内部列如 pk、join_key）→ 提取为通用值。
+///
+/// Note: sqlx's Any driver returns all values as basic types;
+/// chrono types are NOT directly supported — datetimes come as strings.
+/// 注意：sqlx 的 Any 驱动以基本类型返回所有值；
+/// chrono 类型不被直接支持 — 日期时间以字符串形式传来。
 fn row_to_typed_map(
     row: &AnyRow,
     fields: &[SqlField],
@@ -228,7 +296,34 @@ fn row_to_typed_map(
     Ok(map)
 }
 
-
+/// Convert a single column value to TypedValue based on field type.
+/// 根据字段类型将单个列值转换为 TypedValue。
+///
+/// With sqlx Any driver, we try types in order: null check, then type-specific extraction.
+/// 使用 sqlx Any 驱动，我们按顺序尝试类型：先检查 null，然后类型特定提取。
+///
+/// Supported Django field types and their conversion strategies:
+/// 支持的 Django 字段类型及其转换策略：
+///   - Integer types (IntegerField, BigAutoField, etc.) → TypedValue::Int
+///     整数类型 → TypedValue::Int
+///   - FloatField → TypedValue::Float
+///     浮点数 → TypedValue::Float
+///   - DecimalField → TypedValue::Str or Float (based on coerce_to_string)
+///     十进制 → TypedValue::Str 或 Float（基于 coerce_to_string）
+///   - BooleanField → TypedValue::Bool (via i64 for SQLite)
+///     布尔 → TypedValue::Bool（SQLite 通过 i64）
+///   - String types (CharField, TextField, etc.) → TypedValue::Str
+///     字符串类型 → TypedValue::Str
+///   - DateTimeField → TypedValue::Str (parsed and formatted via datetime.rs)
+///     日期时间 → TypedValue::Str（通过 datetime.rs 解析和格式化）
+///   - DateField, TimeField → TypedValue::Str (parsed and formatted)
+///     日期、时间 → TypedValue::Str（解析和格式化）
+///   - JSONField → TypedValue::Json (parsed as serde_json::Value)
+///     JSON → TypedValue::Json（解析为 serde_json::Value）
+///   - BinaryField → TypedValue::Str (base64 encoded)
+///     二进制 → TypedValue::Str（base64 编码）
+///   - Unknown types → fallback to string
+///     未知类型 → 回退到字符串
 fn convert_column_value(
     row: &AnyRow,
     col_name: &str,
@@ -409,7 +504,13 @@ fn convert_column_value(
     }
 }
 
-
+/// Extract a string value from a row column (for pk, join_key, etc.).
+/// 从行列中提取字符串值（用于 pk、join_key 等）。
+///
+/// Tries multiple types in order: i64 → i32 → String → f64.
+/// 按顺序尝试多种类型：i64 → i32 → String → f64。
+/// This handles all common pk types (int, uuid string, etc.).
+/// 这处理所有常见的 pk 类型（int、uuid 字符串等）。
 fn extract_string_value(row: &AnyRow, col_name: &str) -> Result<String, String> {
     if let Ok(v) = row.try_get::<i64, _>(col_name) {
         return Ok(v.to_string());
@@ -426,7 +527,13 @@ fn extract_string_value(row: &AnyRow, col_name: &str) -> Result<String, String> 
     Err(format!("Cannot extract string value from column '{}'", col_name))
 }
 
-
+/// Extract a generic value from a row column (for internal columns).
+/// 从行列中提取通用值（用于内部列）。
+///
+/// Unlike convert_column_value, this doesn't use field_type — it guesses
+/// the type by trying multiple extractions in order.
+/// 与 convert_column_value 不同，这不使用 field_type — 它通过按顺序
+/// 尝试多种提取来猜测类型。
 fn extract_generic_value(row: &AnyRow, col_name: &str) -> Result<TypedValue, String> {
     // Check for NULL / 检查 NULL
     let raw_ref = row.try_get_raw(col_name)
@@ -454,7 +561,11 @@ fn extract_generic_value(row: &AnyRow, col_name: &str) -> Result<TypedValue, Str
     Ok(TypedValue::Str(String::new()))
 }
 
-
+/// Simple base64 encoding (no external dependency).
+/// 简单的 base64 编码（无外部依赖）。
+///
+/// Encodes binary data to a base64 string for safe transport in Python str.
+/// 将二进制数据编码为 base64 字符串，以便在 Python str 中安全传输。
 fn base64_encode(data: &[u8]) -> String {
     const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut result = String::with_capacity((data.len() + 2) / 3 * 4);

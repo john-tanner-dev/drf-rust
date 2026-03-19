@@ -1,7 +1,12 @@
 [package]
 name = "drf-rust"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
+description = "RustModelSerializer: DRF ModelSerializer read accelerated by Rust (PyO3)"
+authors = ["John Tanner <cntianhuan@gmail.com>"]
+license = "MIT"
+homepage = "https://github.com/john-tanner-dev/drf-rust"
+repository = "https://github.com/john-tanner-dev/drf-rust"
 
 [lib]
 name = "rust_engine"

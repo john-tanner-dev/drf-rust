@@ -1,4 +1,25 @@
 # -*- coding: utf-8 -*-
+"""
+Three-way field classification for RustModelSerializer.
+RustModelSerializer 的三向字段分类。
+
+Every field on a serializer is classified into one of:
+每个序列化器字段被归类为以下三类之一：
+
+  - sql_fields:          Source resolves to a database column (possibly through FK/O2O JOINs).
+                         source 解析为数据库列（可能通过 FK/O2O JOIN）。
+  - prefetch_fields:     Source path hits a ManyToMany or reverse ForeignKey relation,
+                         requiring a separate prefetch query.
+                         source 路径命中 ManyToMany 或反向 ForeignKey 关系，需要单独的预取查询。
+  - python_only_fields:  Everything else (SerializerMethodField, callable source, source='*', etc.)
+                         that must be computed by Python.
+                         其他所有情况（SerializerMethodField、可调用 source、source='*' 等），必须由 Python 计算。
+
+This classification determines how each field's value is obtained during serialization:
+sql_fields → Rust via SQL, prefetch_fields → Rust via prefetch SQL, python_only → Python fallback.
+该分类决定了序列化时每个字段值的获取方式：
+sql_fields → Rust 通过 SQL, prefetch_fields → Rust 通过预取 SQL, python_only → Python 回退。
+"""
 import logging
 from dataclasses import dataclass, field as dc_field
 from typing import Any, Dict, List, Optional, Tuple, Type

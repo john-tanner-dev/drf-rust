@@ -1,7 +1,37 @@
+// ============================================================================
+// types.rs — Core type definitions for the Rust engine.
+// types.rs — Rust 引擎的核心类型定义。
+//
+// This module defines:
+// 本模块定义：
+//   - TypedValue: Enum representing all possible field values returned to Python.
+//     TypedValue：枚举，表示返回给 Python 的所有可能字段值。
+//   - DbConfig: Database connection configuration (deserialized from DATABASES JSON).
+//     DbConfig：数据库连接配置（从 DATABASES JSON 反序列化）。
+//   - DbDialect: Enum for database engine types (PostgreSQL, MySQL, SQLite).
+//     DbDialect：数据库引擎类型枚举。
+//   - DjangoSettings: DateTime/timezone settings (deserialized from settings JSON).
+//     DjangoSettings：日期时间/时区设置（从 settings JSON 反序列化）。
+// ============================================================================
+
 use serde::Deserialize;
 use std::collections::HashMap;
 
-
+/// Typed value enum — all possible return types for serialized fields.
+/// 类型化值枚举 — 序列化字段的所有可能返回类型。
+///
+/// Maps directly to Python native types; no PyAny needed.
+/// 直接映射到 Python 原生类型；不需要 PyAny。
+///
+/// Design rule: Each variant corresponds to exactly one Python type:
+/// 设计规则：每个变体恰好对应一个 Python 类型：
+///   None  → Python None
+///   Bool  → Python bool
+///   Int   → Python int
+///   Float → Python float
+///   Str   → Python str
+///   List  → Python list[dict]  (for prefetch/M2M nested results / 用于预取/M2M 嵌套结果)
+///   Json  → Python native       (for JSONField / 用于 JSONField)
 #[derive(Debug, Clone)]
 pub enum TypedValue {
     None,
@@ -17,7 +47,11 @@ pub enum TypedValue {
     Json(serde_json::Value),
 }
 
-
+/// Database connection config, deserialized from DATABASES JSON (Parameter 3).
+/// 数据库连接配置，从 DATABASES JSON 反序列化（参数 3）。
+///
+/// Fields match Django's DATABASES setting structure.
+/// 字段匹配 Django 的 DATABASES 设置结构。
 #[derive(Debug, Clone, Deserialize)]
 pub struct DbConfig {
     /// Database engine string (e.g., "django.db.backends.postgresql")
@@ -52,7 +86,14 @@ pub struct DbConfig {
 }
 
 impl DbConfig {
-
+    /// Detect database dialect from the ENGINE string.
+    /// 从 ENGINE 字符串检测数据库方言。
+    ///
+    /// Matches against known Django backend patterns:
+    /// 匹配已知的 Django 后端模式：
+    ///   - "postgresql" or "postgis" → PostgreSQL
+    ///   - "mysql" → MySQL
+    ///   - "sqlite" → SQLite
     pub fn dialect(&self) -> DbDialect {
         let engine = self.engine.to_lowercase();
         if engine.contains("postgresql") || engine.contains("postgis") {
@@ -111,7 +152,8 @@ impl DbConfig {
     }
 }
 
-
+/// Database dialect enum — identifies the type of database engine.
+/// 数据库方言枚举 — 标识数据库引擎类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DbDialect {
     PostgreSQL,
@@ -120,7 +162,17 @@ pub enum DbDialect {
     Unknown,
 }
 
-
+/// Django settings for datetime/timezone handling (Parameter 4).
+/// 用于日期时间/时区处理的 Django 设置（参数 4）。
+///
+/// These settings control how Rust formats datetime values in the output:
+/// 这些设置控制 Rust 如何格式化输出中的日期时间值：
+///   - USE_TZ: If true, datetime values are assumed UTC and converted to TIME_ZONE.
+///     如果为 true，日期时间值被假定为 UTC 并转换到 TIME_ZONE。
+///   - TIME_ZONE: Target timezone for conversion (e.g., "Asia/Shanghai").
+///     转换的目标时区（如 "Asia/Shanghai"）。
+///   - DATETIME_FORMAT, DATE_FORMAT, TIME_FORMAT: Python strftime format strings.
+///     Python strftime 格式字符串。
 #[derive(Debug, Clone, Deserialize)]
 pub struct DjangoSettings {
     #[serde(rename = "USE_TZ", default)]
@@ -158,7 +210,12 @@ fn default_time_format() -> String {
     "%H:%M:%S".to_string()
 }
 
-
+/// Simple URL encoding for DSN components.
+/// DSN 组件的简单 URL 编码。
+///
+/// Encodes special characters that would break the DSN URL format:
+/// 编码会破坏 DSN URL 格式的特殊字符：
+///   : / @ ? # % (space)
 fn urlencoding(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     for c in s.chars() {

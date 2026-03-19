@@ -6,7 +6,7 @@ on:
       - "v*"                         # 只在推送 v 开头的 tag 时触发
 
 jobs:
-  build:
+  build-wheels:
     strategy:
       matrix:
         include:
@@ -31,20 +31,38 @@ jobs:
             --out dist
           manylinux: auto            # Linux 自动用 manylinux 容器，兼容主流发行版
 
-      - name: Upload wheel
+      - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}-${{ matrix.target }}
           path: dist/*.whl
 
+  build-sdist:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+
+      - name: Upload sdist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
   release:
-    needs: build                     # 等所有平台构建完成再执行
+    needs: [build-wheels, build-sdist]   # 等所有平台构建完成再执行
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
     steps:
-      - name: Download all wheels
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist/
@@ -53,4 +71,11 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.whl
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

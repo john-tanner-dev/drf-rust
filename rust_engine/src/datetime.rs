@@ -1,14 +1,67 @@
+// ============================================================================
+// datetime.rs — DateTime/Date/Time parsing and formatting.
+// datetime.rs — 日期时间/日期/时间解析和格式化。
+//
+// This module handles the conversion of database datetime strings to
+// Python-compatible formatted strings, respecting Django settings:
+// 本模块处理数据库日期时间字符串到 Python 兼容格式字符串的转换，
+// 遵循 Django 设置：
+//
+//   - USE_TZ: If true, values are assumed UTC and converted to TIME_ZONE.
+//     如果为 true，值被假定为 UTC 并转换到 TIME_ZONE。
+//   - TIME_ZONE: Target timezone for conversion (e.g., "Asia/Shanghai").
+//     转换的目标时区（如 "Asia/Shanghai"）。
+//   - DATETIME_FORMAT, DATE_FORMAT, TIME_FORMAT: Python strftime format strings.
+//     Python strftime 格式字符串。
+//
+// The sqlx Any driver returns datetime/date/time as strings (not chrono types),
+// so we must parse them from various database formats first.
+// sqlx 的 Any 驱动以字符串形式返回日期时间（非 chrono 类型），
+// 因此我们必须先从各种数据库格式解析它们。
+// ============================================================================
+
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, DateTime, Utc};
 use chrono_tz::Tz;
 
 use crate::types::DjangoSettings;
 
-
+/// Convert a Python strftime format string to a chrono format string.
+/// 将 Python strftime 格式字符串转换为 chrono 格式字符串。
+///
+/// Most tokens are identical between Python and chrono, with one key difference:
+/// 大多数标记在 Python 和 chrono 之间是相同的，一个关键区别是：
+///   - Python %f = microseconds (6 digits)
+///     Python %f = 微秒（6 位）
+///   - chrono %f = nanoseconds (9 digits), %6f = microseconds (6 digits)
+///     chrono %f = 纳秒（9 位），%6f = 微秒（6 位）
 pub fn python_format_to_chrono(fmt: &str) -> String {
     fmt.replace("%f", "%6f")
 }
 
-
+/// Format a NaiveDateTime according to Django settings.
+/// 根据 Django 设置格式化 NaiveDateTime。
+///
+/// If DATETIME_FORMAT is "iso-8601" (DRF's default):
+/// 如果 DATETIME_FORMAT 是 "iso-8601"（DRF 的默认值）：
+///   Produces Python's datetime.isoformat()-compatible output:
+///   产生与 Python 的 datetime.isoformat() 兼容的输出：
+///     USE_TZ=True:  "2025-10-12T19:31:30.101286+08:00"
+///     USE_TZ=False: "2025-10-12T19:31:30.101286"
+///
+/// Otherwise, uses the strftime format string:
+/// 否则，使用 strftime 格式字符串：
+///   If USE_TZ is true:
+///   如果 USE_TZ 为 true：
+///     1. Assume the value is in UTC (as stored in the database).
+///        假定值是 UTC（如数据库中存储的）。
+///     2. Convert to the target TIME_ZONE (e.g., "Asia/Shanghai").
+///        转换到目标 TIME_ZONE（如 "Asia/Shanghai"）。
+///     3. Format with DATETIME_FORMAT.
+///        使用 DATETIME_FORMAT 格式化。
+///   If USE_TZ is false:
+///   如果 USE_TZ 为 false：
+///     Format the value as-is (no timezone conversion).
+///     按原样格式化（不进行时区转换）。
 pub fn format_datetime(
     value: NaiveDateTime,
     settings: &DjangoSettings,
@@ -55,7 +108,11 @@ pub fn format_datetime(
     value.format(&fmt).to_string()
 }
 
-
+/// Format a NaiveDate according to Django settings.
+/// 根据 Django 设置格式化 NaiveDate。
+///
+/// If DATE_FORMAT is "iso-8601", produces "YYYY-MM-DD".
+/// 如果 DATE_FORMAT 是 "iso-8601"，产生 "YYYY-MM-DD"。
 pub fn format_date(value: NaiveDate, settings: &DjangoSettings) -> String {
     if settings.date_format == "iso-8601" {
         return value.format("%Y-%m-%d").to_string();
@@ -64,7 +121,11 @@ pub fn format_date(value: NaiveDate, settings: &DjangoSettings) -> String {
     value.format(&fmt).to_string()
 }
 
-
+/// Format a NaiveTime according to Django settings.
+/// 根据 Django 设置格式化 NaiveTime。
+///
+/// If TIME_FORMAT is "iso-8601", produces "HH:MM:SS.ffffff".
+/// 如果 TIME_FORMAT 是 "iso-8601"，产生 "HH:MM:SS.ffffff"。
 pub fn format_time(value: NaiveTime, settings: &DjangoSettings) -> String {
     if settings.time_format == "iso-8601" {
         return value.format("%H:%M:%S%.6f").to_string();
@@ -73,7 +134,19 @@ pub fn format_time(value: NaiveTime, settings: &DjangoSettings) -> String {
     value.format(&fmt).to_string()
 }
 
-
+/// Normalize a timezone offset in a datetime string for chrono parsing.
+/// 规范化日期时间字符串中的时区偏移量以便 chrono 解析。
+///
+/// PostgreSQL CAST(timestamptz AS TEXT) produces short offsets like "+00" or "-05",
+/// but chrono's %:z expects "+00:00" or "-05:00". This function normalizes them.
+/// PostgreSQL 的 CAST(timestamptz AS TEXT) 产生短偏移量如 "+00" 或 "-05"，
+/// 但 chrono 的 %:z 期望 "+00:00" 或 "-05:00"。此函数对其进行规范化。
+///
+/// Examples / 示例:
+///   - "2025-10-12 11:31:30.101286+00" → "2025-10-12 11:31:30.101286+00:00"
+///   - "2025-10-12 11:31:30+08" → "2025-10-12 11:31:30+08:00"
+///   - "2025-10-12 11:31:30+08:00" → unchanged / 不变
+///   - "2025-10-12 11:31:30" → unchanged / 不变
 fn normalize_tz_offset(s: &str) -> String {
     let bytes = s.as_bytes();
     let len = bytes.len();
@@ -95,7 +168,21 @@ fn normalize_tz_offset(s: &str) -> String {
     s.to_string()
 }
 
-
+/// Parse a database datetime string to NaiveDateTime.
+/// 将数据库日期时间字符串解析为 NaiveDateTime。
+///
+/// Handles common formats across PostgreSQL, MySQL, SQLite:
+/// 处理 PostgreSQL、MySQL、SQLite 的常见格式：
+///   - ISO 8601 with T separator: "2024-01-15T10:30:00.123456"
+///     ISO 8601 带 T 分隔符
+///   - Space separator (MySQL style): "2024-01-15 10:30:00.123456"
+///     空格分隔（MySQL 风格）
+///   - Without fractional seconds: "2024-01-15T10:30:00"
+///     无小数秒
+///   - PostgreSQL timestamptz with offset: "2024-01-15 10:30:00+08:00"
+///     PostgreSQL 带偏移量的 timestamptz
+///   - PostgreSQL short offset: "2024-01-15 10:30:00+00" (normalized to "+00:00")
+///     PostgreSQL 短偏移量（规范化为 "+00:00"）
 pub fn parse_datetime_str(s: &str) -> Option<NaiveDateTime> {
     let s = s.trim();
 
@@ -141,12 +228,22 @@ pub fn parse_datetime_str(s: &str) -> Option<NaiveDateTime> {
     None
 }
 
-
+/// Parse a date string to NaiveDate.
+/// 将日期字符串解析为 NaiveDate。
+///
+/// Expected format: "YYYY-MM-DD" (standard across all database backends).
+/// 预期格式："YYYY-MM-DD"（所有数据库后端的标准格式）。
 pub fn parse_date_str(s: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(s.trim(), "%Y-%m-%d").ok()
 }
 
-
+/// Parse a time string to NaiveTime.
+/// 将时间字符串解析为 NaiveTime。
+///
+/// Handles with and without fractional seconds:
+/// 处理有无小数秒的情况：
+///   - "10:30:00.123456" (with microseconds / 带微秒)
+///   - "10:30:00" (without / 不带)
 pub fn parse_time_str(s: &str) -> Option<NaiveTime> {
     let s = s.trim();
     // Try with fractional seconds first

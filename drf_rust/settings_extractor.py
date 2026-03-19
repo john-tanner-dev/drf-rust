@@ -1,4 +1,23 @@
 # -*- coding: utf-8 -*-
+"""
+Extract Django/DRF settings for the Rust engine.
+为 Rust 引擎提取 Django/DRF 设置。
+
+This module extracts two categories of configuration:
+本模块提取两类配置：
+
+  Parameter 3: DATABASES config (filtered for Rust connection info).
+  参数 3：DATABASES 配置（过滤出 Rust 连接所需信息）。
+    - ENGINE, HOST, PORT, NAME, USER, PASSWORD, OPTIONS
+    - Used by Rust to build connection DSNs and create connection pools.
+      Rust 用此构建连接 DSN 并创建连接池。
+
+  Parameter 4: Django datetime/timezone settings.
+  参数 4：Django 日期时间/时区设置。
+    - USE_TZ, TIME_ZONE, DATETIME_FORMAT, DATE_FORMAT, TIME_FORMAT
+    - Used by Rust for datetime formatting and timezone conversion.
+      Rust 用此进行日期时间格式化和时区转换。
+"""
 import json
 from typing import Any, Dict
 

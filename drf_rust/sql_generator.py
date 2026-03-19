@@ -1,4 +1,33 @@
 # -*- coding: utf-8 -*-
+"""
+SQL generation for RustModelSerializer.
+RustModelSerializer 的 SQL 生成。
+
+Generates two types of SQL:
+生成两种类型的 SQL：
+
+  1. Main SQL: Uses Django's compiled SQL for correct JOINs/WHERE/ORDER BY,
+     replaces only the SELECT clause with our custom columns.
+     主 SQL：使用 Django 编译的 SQL 以确保正确的 JOINs/WHERE/ORDER BY，
+     仅将 SELECT 子句替换为我们自定义的列。
+
+  2. Prefetch SQL templates: One per prefetch_field, with {ids} placeholder
+     for the parent primary keys (filled by Rust at runtime).
+     预取 SQL 模板：每个 prefetch_field 一个，带有 {ids} 占位符
+     用于父级主键（由 Rust 在运行时填充）。
+
+Design choices / 设计选择:
+  - Uses Django's queryset compiler for all main-query JOINs to guarantee
+    correct table aliases in WHERE/ORDER BY (fixes cross-table filter bugs).
+    使用 Django 的 QuerySet 编译器处理所有主查询 JOINs，确保
+    WHERE/ORDER BY 中正确的表别名（修复跨表过滤 bug）。
+  - Uses connection.ops.quote_name() for dialect-aware quoting (MySQL `, PostgreSQL ", SQLite ").
+    使用 connection.ops.quote_name() 进行方言感知的引号处理。
+  - Depth-aware keyword search for SQL parsing (correctly handles subqueries).
+    深度感知的关键字搜索用于 SQL 解析（正确处理子查询）。
+  - Character-by-character param splicing (safe from format string injection).
+    逐字符参数拼接（防止格式化字符串注入）。
+"""
 import datetime
 import decimal
 import logging

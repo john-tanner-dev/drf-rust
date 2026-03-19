@@ -1,4 +1,27 @@
 # -*- coding: utf-8 -*-
+"""
+Python-only field filling for RustModelSerializer.
+RustModelSerializer 的 Python-only 字段填充。
+
+When python_only_fields is not empty, this module:
+当 python_only_fields 不为空时，本模块：
+  1. Collects pk values from Rust-returned results.
+     从 Rust 返回的结果中收集 pk 值。
+  2. Queries model instances by pk (batch query).
+     按 pk 查询模型实例（批量查询）。
+  3. Builds a partial serializer with only the python_only_fields.
+     构建一个仅包含 python_only_fields 的部分序列化器。
+  4. Calls to_representation for each instance (standard DRF mechanism).
+     为每个实例调用 to_representation（标准 DRF 机制）。
+  5. Merges results into the Rust-returned dicts (in-place modification).
+     将结果合并到 Rust 返回的字典中（就地修改）。
+
+This ensures that fields like SerializerMethodField, source='*', and callable
+source fields are correctly computed via Python, while the bulk of the fields
+are still handled by the fast Rust path.
+这确保了像 SerializerMethodField、source='*' 和可调用 source 字段通过 Python
+正确计算，而大部分字段仍由快速的 Rust 路径处理。
+"""
 import logging
 import traceback
 from typing import Any, Dict, List, Type

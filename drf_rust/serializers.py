@@ -1,4 +1,27 @@
 # -*- coding: utf-8 -*-
+"""
+RustModelSerializer and RustListSerializer.
+RustModelSerializer 和 RustListSerializer。
+
+Drop-in replacement for DRF ModelSerializer that accelerates the read path
+(to_representation) via Rust-based SQL execution and result building.
+作为 DRF ModelSerializer 的直接替代品，通过 Rust 实现的 SQL 执行和结果构建
+来加速读取路径 (to_representation)。
+
+Architecture / 架构:
+  1. Field classification: Categorize serializer fields into sql_fields,
+     prefetch_fields, and python_only_fields.
+     字段分类：将序列化器字段归类为 sql_fields、prefetch_fields 和 python_only_fields。
+  2. SQL generation: Generate main SQL (with JOINs) and prefetch SQL templates.
+     SQL 生成：生成主 SQL（带 JOIN）和预取 SQL 模板。
+  3. Schema building: Describe field types and structure as JSON for Rust.
+     Schema 构建：将字段类型和结构描述为 JSON 传递给 Rust。
+  4. Rust execution: Execute SQL, build Python dicts, return list[dict].
+     Rust 执行：执行 SQL，构建 Python 字典，返回 list[dict]。
+  5. Python filling: Fill python_only_fields (SerializerMethodField etc.) via
+     standard DRF mechanism.
+     Python 填充：通过标准 DRF 机制填充 python_only_fields（如 SerializerMethodField 等）。
+"""
 import json
 import logging
 import warnings

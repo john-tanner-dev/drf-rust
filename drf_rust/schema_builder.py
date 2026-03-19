@@ -1,4 +1,23 @@
 # -*- coding: utf-8 -*-
+"""
+Build Schema JSON for the Rust engine from classification results.
+从分类结果构建传递给 Rust 引擎的 Schema JSON。
+
+The schema describes the field structure, types, and prefetch SQL for the Rust
+engine to execute and build Python dict results. This is Parameter 1 of the
+4 parameters passed to rust_engine.execute_serialization().
+该 schema 描述了字段结构、类型和预取 SQL，供 Rust 引擎执行并构建 Python 字典结果。
+这是传递给 rust_engine.execute_serialization() 的 4 个参数中的参数 1。
+
+Schema structure / Schema 结构:
+{
+    "primary_db": "default",           -- Database alias / 数据库别名
+    "sql_fields": [...],               -- Fields from main SQL / 主 SQL 中的字段
+    "prefetch_fields": [...],          -- Fields needing prefetch SQL / 需要预取 SQL 的字段
+    "python_only_fields": [...],       -- Field names for Python fallback / Python 回退的字段名
+    "internal_pks": {}                 -- Internal pk aliases / 内部 pk 别名
+}
+"""
 import json
 import logging
 from typing import Any, Dict, List, Optional
