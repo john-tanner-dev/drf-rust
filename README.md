@@ -217,6 +217,12 @@ Your API will still work.
 
 ## Installation
 
+### Install from pypi.org
+
+```bash
+pip install drf-rust
+```
+
 ### Install from source
 
 ```bash

@@ -219,6 +219,12 @@ drf-rust → 自动回退到 DRF
 
 ## 安装
 
+### Install from pypi.org
+
+```bash
+pip install drf-rust
+```
+
 ### 源码安装
 
 ```bash
